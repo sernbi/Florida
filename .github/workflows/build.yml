@@ -174,7 +174,7 @@ jobs:
                     echo "Skip manually applied patch: $patch"
                     ;;
                   *)
-                    git am -3 "$patch" || {
+                    git am  "$patch" || {
                       git am --show-current-patch=diff
                       git status
                       exit 1
@@ -183,7 +183,7 @@ jobs:
                 esac
               done
             else
-              git am -3 ../../../patches/$name/*.patch || {
+              git am  ../../../patches/$name/*.patch || {
                 git am --show-current-patch=diff
                 git status
                 exit 1
