@@ -53,8 +53,8 @@ jobs:
               const {
                 data: { tag_name: ver }
               } = releaseResponse;
-              if (ver == '${{ steps.pullFridaLatestRelease.outputs.FRIDA_VERSION }}'){
-                if ( ${{ ( github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}){
+              if (ver == '${{ steps.pullFridaLatestRelease.outputs.FRIDA_VERSION }}') {
+                if (${{ ( github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}) {
                   core.setOutput('ALREADY_RELEASE', '2');
                 } else {
                   core.setOutput('ALREADY_RELEASE', '1');
@@ -63,7 +63,7 @@ jobs:
                 core.setOutput('ALREADY_RELEASE', '0');
               }
             } catch (e) {
-              if(e.message == 'Not Found'){
+              if (e.message == 'Not Found') {
                 core.setOutput('ALREADY_RELEASE', '0');
               } else {
                 core.setFailed(e.message);
@@ -126,7 +126,8 @@ jobs:
 
       - name: install dependencies
         run: |
-          sudo apt-get update && DEBIAN_FRONTEND=noninteractive sudo apt-get install build-essential tree ninja-build gcc-multilib g++-multilib lib32stdc++-9-dev flex bison ruby ruby-dev python3-requests python3-setuptools python3-dev python3-pip libc6-dev libc6-dev-i386 -y
+          sudo apt-get update
+          DEBIAN_FRONTEND=noninteractive sudo apt-get install build-essential tree ninja-build gcc-multilib g++-multilib lib32stdc++-9-dev flex bison ruby ruby-dev python3-requests python3-setuptools python3-dev python3-pip libc6-dev libc6-dev-i386 -y
           sudo gem install fpm -v 1.11.0 --no-document
           python3 -m pip install lief graphlib
 
@@ -146,57 +147,22 @@ jobs:
 
           for path in ../patches/*
           do
-            name=$(basename $path)
-            real=$(realpath $path)
+            name=$(basename "$path")
+            real=$(realpath "$path")
             echo "Apply patches in $real to frida/subprojects/$name"
             cd subprojects/$name
 
             if [ "$name" = "frida-core" ]; then
               echo "Apply Florida rpc patch manually for frida-core 17.15.3"
 
-              python3 <<'PY'
-from pathlib import Path
+              perl -0pi -e 's/\x09\x09public RpcClient \(Peer peer\) \{\n\x09\x09\x09Object \(peer: peer\);\n\x09\x09\}\n/$&\n\x09\x09public string getRpcStr(bool quote){\n\x09\x09\x09string result = (string) GLib.Base64.decode((string) GLib.Base64.decode("Wm5KcFpHRTZjbkJq"));\n\x09\x09\x09if(quote){\n\x09\x09\x09\x09return "\\"" + result + "\\"";\n\x09\x09\x09}else{\n\x09\x09\x09\x09return result;\n\x09\x09\x09}\n\x09\x09}\n/s' lib/base/rpc.vala
+              perl -0pi -e 's/\.add_string_value \("frida:rpc"\)/.add_string_value (getRpcStr(false))/g' lib/base/rpc.vala
+              perl -0pi -e 's/json\.index_of \("\\"frida:rpc\\""\)/json.index_of (getRpcStr(true))/g' lib/base/rpc.vala
+              perl -0pi -e 's/type != "frida:rpc"/type != getRpcStr(false)/g' lib/base/rpc.vala
 
-p = Path("lib/base/rpc.vala")
-s = p.read_text()
-
-needle = '''		public RpcClient (Peer peer) {
-			Object (peer: peer);
-		}
-'''
-
-insert = '''		public RpcClient (Peer peer) {
-			Object (peer: peer);
-		}
-
-		public string getRpcStr(bool quote){
-			string result = (string) GLib.Base64.decode((string) GLib.Base64.decode("Wm5KcFpHRTZjbkJq"));
-			if(quote){
-				return "\\\"" + result + "\\\"";
-			}else{
-				return result;
-			}
-		}
-'''
-
-if "getRpcStr" not in s:
-    if needle not in s:
-        raise SystemExit("Cannot find RpcClient constructor in lib/base/rpc.vala")
-    s = s.replace(needle, insert, 1)
-
-replacements = {
-    '.add_string_value ("frida:rpc")': '.add_string_value (getRpcStr(false))',
-    'json.index_of ("\\"frida:rpc\\"")': 'json.index_of (getRpcStr(true))',
-    'type != "frida:rpc"': 'type != getRpcStr(false)',
-}
-
-for old, new in replacements.items():
-    if old not in s:
-        raise SystemExit(f"Cannot find expected text: {old}")
-    s = s.replace(old, new)
-
-p.write_text(s)
-PY
+              grep -q "getRpcStr" lib/base/rpc.vala
+              grep -q "getRpcStr(false)" lib/base/rpc.vala
+              grep -q "getRpcStr(true)" lib/base/rpc.vala
 
               git add lib/base/rpc.vala
               git commit -m "Florida: string_frida_rpc"
