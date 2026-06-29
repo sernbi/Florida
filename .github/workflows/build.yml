@@ -152,7 +152,11 @@ jobs:
             real=$(realpath $path)
             echo "Apply patches in $real to frida/subprojects/$name"
             cd subprojects/$name
-            git am ../../../patches/$name/*.patch
+            git am -3 ../../../patches/$name/*.patch || {
+              git am --show-current-patch=diff
+              git status
+              exit 1
+            }
             cd ../..
           done
           cd ..
